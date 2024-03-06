@@ -5,7 +5,7 @@ uniform vec4 qView;
 uniform vec4 qView2;
 in vec3 iPos;
 out vec2 oPos;
-const float scale = 0.015;
+const float scale = 0.02;
 
 const vec2 corners[] = vec2[](
   vec2(-0.866, -0.5),
