@@ -1,10 +1,12 @@
 const quats = {
   cur: [0.0, 0.0, 0.0, 1.0],
   tmp: [0.0, 0.0, 0.0, 1.0],
-  rot: [0.0, 0.0, 0.0]
+  rot: [0.0, 0.0, 0.0],
+  bezier: null
 };
 
 const viewAngle = 40.0;
+const bezierDuration = 1500.0;
 
 window.addEventListener('DOMContentLoaded', async _ => {
   const canvas = document.querySelector('canvas');
@@ -18,7 +20,7 @@ window.addEventListener('DOMContentLoaded', async _ => {
   gl.clearColor(0.0, 0.0, 0.0, 1.0);
 
   const vao = gl.createVertexArray();
-  gl.bindVertexArray(vao);  
+  gl.bindVertexArray(vao);
   const vbuf = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, vbuf);
   const data = new Float32Array(await fetch('coords.data').then(r => r.arrayBuffer()));
@@ -53,9 +55,29 @@ window.addEventListener('DOMContentLoaded', async _ => {
         const q = qmul(rot, quats.cur);
         const n = qnorm(q, q);
         quats.cur = [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
+        bTime += dt;
       }
     }
     lastT = time;
+
+    if(quats.bezier !== null) {
+      const t = Math.min(bTime / bezierDuration, 1.0);
+      const rt = 1.0 - t;
+      const wts = [rt*rt*rt, 3*t*rt*rt, 3*t*t*rt, t*t*t];
+      const lq = [0.0, 0.0, 0.0];
+      for(let i = 0; i < 3; i++)
+        for(let j = 0; j < 4; j++)
+          lq[i] += wts[j] * quats.bezier[j][i];
+      quats.tmp = qexp(lq, 1);
+
+      if(t == 1.0) {
+        const q = qmul(quats.tmp, quats.cur);
+        const n = qnorm(q, q);
+        quats.cur = [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
+        quats.tmp = [0.0, 0.0, 0.0, 1.0];
+        quats.bezier = null;
+      }
+    }
 
     gl.uniform4fv(prog.qView, quats.cur);
     gl.uniform4fv(prog.qView2, quats.tmp);
@@ -68,6 +90,7 @@ window.addEventListener('DOMContentLoaded', async _ => {
 
   let pid, pcoords;
   const hist = [];
+  let bTime;
 
   canvas.addEventListener('pointerdown', ev => {
     if(pid === undefined) {
@@ -77,6 +100,7 @@ window.addEventListener('DOMContentLoaded', async _ => {
       pcoords = [ev.clientX, ev.clientY];
       hist.length = 0;
       hist.push({ t: performance.now(), q: quats.tmp });
+      quats.bezier = null;
       quats.rot = [0.0, 0.0, 0.0];
     }
   });
@@ -121,7 +145,41 @@ window.addEventListener('DOMContentLoaded', async _ => {
 
   document.querySelector('button').addEventListener('click', _ => {
     const i = Math.floor(Math.random() * 6);
-    quats.cur = [...views.subarray(i * 4, (i + 1) * 4)];
+    const tgt = [...views.subarray(i * 4, (i + 1) * 4)];
+    // Cancel current Bezier, if any
+    if(quats.bezier !== null) {
+      const t = Math.min(bTime / bezierDuration, 1.0);
+      const rt = 1.0 - t;
+
+      const wts = [rt*rt*rt, 3*t*rt*rt, 3*t*t*rt, t*t*t];
+      const lq = [0.0, 0.0, 0.0];
+      for(let i = 0; i < 3; i++)
+        for(let j = 0; j < 4; j++)
+          lq[i] += wts[j] * quats.bezier[j][i];
+      const q = qmul(qexp(lq, 1), quats.cur);
+      const n = qnorm(q, q);
+      quats.cur = [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
+      quats.tmp = [0.0, 0.0, 0.0, 1.0];
+
+      const wts2 = [-3*rt*rt, 3*(rt*rt - 2*t*rt), 3*(2*t*rt - t*t), 3*t*t];
+      const spd = [0.0, 0.0, 0.0];
+      for(let i = 0; i < 3; i++)
+        for(let j = 0; j < 4; j++)
+          spd[i] += wts2[j] * quats.bezier[j][i] / bezierDuration;
+      quats.rot = spd;
+
+      quats.bezier = null;
+    }
+    const curSpeed = [
+      quats.rot[0] * bezierDuration / 3.0,
+      quats.rot[1] * bezierDuration / 3.0,
+      quats.rot[2] * bezierDuration / 3.0
+    ];
+
+    const tlog = qlog0(qmul(tgt, qconj(quats.cur)), 1);
+    quats.bezier = [[0.0, 0.0, 0.0], curSpeed, tlog, tlog];
+    quats.rot = [0.0, 0.0, 0.0];
+    bTime = 0.0;
   });
 
   requestAnimationFrame(drawFrame);
@@ -144,12 +202,15 @@ function qnorm(q) {
   return q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3];
 }
 
-function qlog0(q, div) { // assumes q.q == 1, q[3] != -1
-  const a = Math.acos(q[3]);
+function qlog0(q, div) { // assumes q.q == 1
+  const s = Math.sign(q[3]);
+  if(s * q[3] > 1.0)
+    return [0.0, 0.0, 0.0];
+  const a = Math.acos(s * q[3]);
   if(a == 0.0)
     return [0.0, 0.0, 0.0];
   else {
-    const m = a / Math.sin(a) / div;
+    const m = s * a / Math.sin(a) / div;
     return [m * q[0], m * q[1], m * q[2]];
   }
 }
