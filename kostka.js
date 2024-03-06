@@ -1,11 +1,5 @@
 const quats = {
-  cur: //[0.0, 0.0, 0.0, 1.0],
-  [-0.503882, 0.580951, -0.624463, -0.136544],
-//  [0.837157, -0.407247, -0.322235, -0.171709],
-//  [0.712324, -0.562016, 0.254146, -0.334875],
-//  [-0.457482, 0.126345, -0.427474, 0.769424],
-//  [0.348691, -0.868293, 0.30171, 0.182903],
-//  [-0.738218, -0.126346, -0.106183, 0.654061],
+  cur: [0.0, 0.0, 0.0, 1.0],
   tmp: [0.0, 0.0, 0.0, 1.0],
   rot: [0.0, 0.0, 0.0]
 };
@@ -25,24 +19,15 @@ window.addEventListener('DOMContentLoaded', async _ => {
 
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);  
-
   const vbuf = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, vbuf);
-  /*const data = new Float32Array([
-    -1, -1, -1,
-    -1, -1, 1,
-    -1, 1, -1,
-    -1, 1, 1,
-    1, -1, -1,
-    1, -1, 1,
-    1, 1, -1,
-    1, 1, 1
-  ]);*/
   const data = new Float32Array(await fetch('coords.data').then(r => r.arrayBuffer()));
   gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
   gl.vertexAttribDivisor(0, 1);
+
+  const views = new Float32Array(await fetch('quats.data').then(r => r.arrayBuffer()));
 
   let lastT;
   function drawFrame(time) {
@@ -132,6 +117,11 @@ window.addEventListener('DOMContentLoaded', async _ => {
     quats.tmp = [0.0, 0.0, 0.0, 1.0];
     canvas.releasePointerCapture(pid);
     pid = undefined;
+  });
+
+  canvas.addEventListener('dblclick', ev => {
+    const i = Math.floor(Math.random() * 6);
+    quats.cur = [...views.subarray(i * 4, (i + 1) * 4)];
   });
 
   requestAnimationFrame(drawFrame);
