@@ -119,7 +119,7 @@ window.addEventListener('DOMContentLoaded', async _ => {
     pid = undefined;
   });
 
-  canvas.addEventListener('dblclick', ev => {
+  document.querySelector('button').addEventListener('click', _ => {
     const i = Math.floor(Math.random() * 6);
     quats.cur = [...views.subarray(i * 4, (i + 1) * 4)];
   });
