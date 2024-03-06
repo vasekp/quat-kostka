@@ -23,13 +23,13 @@ window.addEventListener('DOMContentLoaded', async _ => {
   gl.bindVertexArray(vao);
   const vbuf = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, vbuf);
-  const data = new Float32Array(await fetch('coords.data').then(r => r.arrayBuffer()));
+  const data = new Float32Array(await fetch('coords.data', { cache: "no-store" }).then(r => r.arrayBuffer()));
   gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
   gl.vertexAttribDivisor(0, 1);
 
-  const views = new Float32Array(await fetch('quats.data').then(r => r.arrayBuffer()));
+  const views = new Float32Array(await fetch('quats.data', { cache: "no-store" }).then(r => r.arrayBuffer()));
 
   let lastT;
   function drawFrame(time) {
