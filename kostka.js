@@ -92,61 +92,7 @@ window.addEventListener('DOMContentLoaded', async _ => {
   const hist = [];
   let bTime;
 
-  canvas.addEventListener('pointerdown', ev => {
-    if(pid === undefined) {
-      pid = ev.pointerId;
-      canvas.setPointerCapture(pid);
-      ev.preventDefault();
-      pcoords = [ev.clientX, ev.clientY];
-      hist.length = 0;
-      hist.push({ t: performance.now(), q: quats.tmp });
-      quats.bezier = null;
-      quats.rot = [0.0, 0.0, 0.0];
-    }
-  });
-
-  canvas.addEventListener('pointermove', ev => {
-    if(pid !== undefined) {
-      const coords = [ev.clientX, ev.clientY];
-      const angle = viewAngle * Math.PI / 180.0 * 3.0;
-      const ax = (coords[0] - pcoords[0]) / canvas.height * 2 * angle;
-      const ay = -(coords[1] - pcoords[1]) / canvas.height * 2 * angle;
-      quats.tmp = qmul(
-        [Math.sin(ay / 2), 0, 0, Math.cos(ay / 2)],
-        [0, Math.sin(ax / 2), 0, Math.cos(ax / 2)]);
-      const now = performance.now();
-      hist.push({ t: performance.now(), q: quats.tmp });
-      hist.splice(0, hist.findIndex(rec => rec.t >= now - 100));
-    }
-  });
-
-  canvas.addEventListener('pointerup', ev => {
-    if(pid !== undefined) {
-      quats.cur = qmul(quats.tmp, quats.cur);
-      const now = performance.now();
-      hist.splice(0, hist.findIndex(rec => rec[0] >= now - 100));
-      if(hist.length >= 2 && hist.at(-1).t != hist[0].t && now - hist.at(-1).t < 10) {
-        const dt = hist.at(-1).t - hist[0].t;
-        const dq = qmul(hist.at(-1).q, qconj(hist[0].q));
-        quats.rot = qlog0(dq, dt);
-      } else
-        quats.rot = [0.0, 0.0, 0.0];
-    }
-    quats.tmp = [0.0, 0.0, 0.0, 1.0];
-    canvas.releasePointerCapture(pid);
-    pid = undefined;
-  });
-
-  canvas.addEventListener('pointercancel', ev => {
-    quats.tmp = [0.0, 0.0, 0.0, 1.0];
-    canvas.releasePointerCapture(pid);
-    pid = undefined;
-  });
-
-  document.querySelector('button').addEventListener('click', _ => {
-    const i = Math.floor(Math.random() * 6);
-    const tgt = [...views.subarray(i * 4, (i + 1) * 4)];
-    // Cancel current Bezier, if any
+  function cancelTransition() {
     if(quats.bezier !== null) {
       const t = Math.min(bTime / bezierDuration, 1.0);
       const rt = 1.0 - t;
@@ -170,6 +116,63 @@ window.addEventListener('DOMContentLoaded', async _ => {
 
       quats.bezier = null;
     }
+  }
+
+  canvas.addEventListener('pointerdown', ev => {
+    if(pid === undefined) {
+      pid = ev.pointerId;
+      canvas.setPointerCapture(pid);
+      ev.preventDefault();
+      pcoords = [ev.clientX, ev.clientY];
+      hist.length = 0;
+      hist.push({ t: performance.now(), q: quats.tmp });
+      cancelTransition();
+      quats.rot = [0.0, 0.0, 0.0];
+    }
+  });
+
+  canvas.addEventListener('pointermove', ev => {
+    if(pid === ev.pointerId) {
+      const coords = [ev.clientX, ev.clientY];
+      const angle = viewAngle * Math.PI / 180.0 * 3.0;
+      const ax = (coords[0] - pcoords[0]) / canvas.height * 2 * angle;
+      const ay = -(coords[1] - pcoords[1]) / canvas.height * 2 * angle;
+      quats.tmp = qmul(
+        [Math.sin(ay / 2), 0, 0, Math.cos(ay / 2)],
+        [0, Math.sin(ax / 2), 0, Math.cos(ax / 2)]);
+      const now = performance.now();
+      hist.push({ t: performance.now(), q: quats.tmp });
+      hist.splice(0, hist.findIndex(rec => rec.t >= now - 100));
+    }
+  });
+
+  canvas.addEventListener('pointerup', ev => {
+    if(pid === ev.pointerId) {
+      quats.cur = qmul(quats.tmp, quats.cur);
+      const now = performance.now();
+      hist.splice(0, hist.findIndex(rec => rec[0] >= now - 100));
+      if(hist.length >= 2 && hist.at(-1).t != hist[0].t && now - hist.at(-1).t < 10) {
+        const dt = hist.at(-1).t - hist[0].t;
+        const dq = qmul(hist.at(-1).q, qconj(hist[0].q));
+        quats.rot = qlog0(dq, dt);
+      } else
+        quats.rot = [0.0, 0.0, 0.0];
+      quats.tmp = [0.0, 0.0, 0.0, 1.0];
+      canvas.releasePointerCapture(pid);
+      pid = undefined;
+    }
+  });
+
+  canvas.addEventListener('pointercancel', ev => {
+    quats.tmp = [0.0, 0.0, 0.0, 1.0];
+    canvas.releasePointerCapture(pid);
+    pid = undefined;
+  });
+
+  document.querySelector('button').addEventListener('click', _ => {
+    const i = Math.floor(Math.random() * 6);
+    const tgt = [...views.subarray(i * 4, (i + 1) * 4)];
+    cancelTransition();
     const curSpeed = [
       quats.rot[0] * bezierDuration / 3.0,
       quats.rot[1] * bezierDuration / 3.0,
