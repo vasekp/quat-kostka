@@ -66,8 +66,7 @@ window.addEventListener('DOMContentLoaded', async _ => {
 
       if(t == 1.0) {
         const q = qmul(quats.tmp, quats.cur);
-        const n = qnorm(q);
-        quats.cur = [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
+        quats.cur = qnorm(q);
         quats.tmp = [0.0, 0.0, 0.0, 1.0];
         quats.bezier = null;
       }
@@ -96,8 +95,7 @@ window.addEventListener('DOMContentLoaded', async _ => {
         for(let j = 0; j < 4; j++)
           lq[i] += wts[j] * quats.bezier[j][i];
       const q = qmul(qexp(lq, 1), quats.cur);
-      const n = qnorm(q);
-      quats.cur = [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
+      quats.cur = qnorm(q);
       quats.tmp = [0.0, 0.0, 0.0, 1.0];
       quats.bezier = null;
     }
@@ -178,11 +176,12 @@ function qconj(q) {
   return [-q[0], -q[1], -q[2], q[3]];
 }
 
-function qnorm(q) {
-  return Math.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
+function qnorm(q) { // assumes |q| ≠ 0
+  const n = Math.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
+  return [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
 }
 
-function qlog0(q, div) { // assumes q.q == 1
+function qlog0(q, div) { // assumes |q| = 1
   const s = Math.sign(q[3]);
   if(s * q[3] > 1.0)
     return [0.0, 0.0, 0.0];
