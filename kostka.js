@@ -1,7 +1,6 @@
 const quats = {
   cur: [0.0, 0.0, 0.0, 1.0],
   tmp: [0.0, 0.0, 0.0, 1.0],
-  rot: [0.0, 0.0, 0.0],
   bezier: null
 };
 
@@ -51,20 +50,7 @@ window.addEventListener('DOMContentLoaded', async _ => {
 
     if(lastT !== undefined) {
       const dt = time - lastT;
-      if(dt < 1000) {
-        const rot = quats.rot;
-        const exp = qexp(rot, dt);
-        const q = qmul(exp, quats.cur);
-        const n = qnorm(q);
-        quats.cur = [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
-        const l0 = Math.sqrt(rot[0] * rot[0] + rot[1] * rot[1] + rot[2] * rot[2]);
-        if(l0 > 0.0) {
-          const l1 = Math.max(l0 - speedLoss * dt / 1000.0, 0.0);
-          console.log(l0, l1);
-          quats.rot = [rot[0] * l1 / l0, rot[1] * l1 / l0, rot[2] * l1 / l0];
-        }
-        bTime += dt;
-      }
+      bTime += dt;
     }
     lastT = time;
 
@@ -104,7 +90,6 @@ window.addEventListener('DOMContentLoaded', async _ => {
     if(quats.bezier !== null) {
       const t = Math.min(bTime / bezierDuration, 1.0);
       const rt = 1.0 - t;
-
       const wts = [rt*rt*rt, 3*t*rt*rt, 3*t*t*rt, t*t*t];
       const lq = [0.0, 0.0, 0.0];
       for(let i = 0; i < 3; i++)
@@ -114,14 +99,6 @@ window.addEventListener('DOMContentLoaded', async _ => {
       const n = qnorm(q);
       quats.cur = [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
       quats.tmp = [0.0, 0.0, 0.0, 1.0];
-
-      const wts2 = [-3*rt*rt, 3*(rt*rt - 2*t*rt), 3*(2*t*rt - t*t), 3*t*t];
-      const spd = [0.0, 0.0, 0.0];
-      for(let i = 0; i < 3; i++)
-        for(let j = 0; j < 4; j++)
-          spd[i] += wts2[j] * quats.bezier[j][i] / bezierDuration;
-      quats.rot = spd;
-
       quats.bezier = null;
     }
   }
@@ -135,7 +112,6 @@ window.addEventListener('DOMContentLoaded', async _ => {
       hist.length = 0;
       hist.push({ t: performance.now(), q: quats.tmp });
       cancelTransition();
-      quats.rot = [0.0, 0.0, 0.0];
     }
   });
 
@@ -162,9 +138,18 @@ window.addEventListener('DOMContentLoaded', async _ => {
       if(hist.length >= 2 && hist.at(-1).t != hist[0].t && now - hist.at(-1).t < 10) {
         const dt = hist.at(-1).t - hist[0].t;
         const dq = qmul(hist.at(-1).q, qconj(hist[0].q));
-        quats.rot = qlog0(dq, dt);
-      } else
-        quats.rot = [0.0, 0.0, 0.0];
+        const rot = qlog0(dq, dt);
+        const i = Math.floor(Math.random() * 6);
+        const tgt = [...views.subarray(i * 4, (i + 1) * 4)];
+        const curSpeed = [
+          rot[0] * bezierDuration / 3.0,
+          rot[1] * bezierDuration / 3.0,
+          rot[2] * bezierDuration / 3.0
+        ];
+        const tlog = qlog0(qmul(tgt, qconj(quats.cur)), 1);
+        quats.bezier = [[0.0, 0.0, 0.0], curSpeed, tlog, tlog];
+        bTime = 0.0;
+      }
       quats.tmp = [0.0, 0.0, 0.0, 1.0];
       canvas.releasePointerCapture(pid);
       pid = undefined;
@@ -175,22 +160,6 @@ window.addEventListener('DOMContentLoaded', async _ => {
     quats.tmp = [0.0, 0.0, 0.0, 1.0];
     canvas.releasePointerCapture(pid);
     pid = undefined;
-  });
-
-  document.querySelector('button').addEventListener('click', _ => {
-    const i = Math.floor(Math.random() * 6);
-    const tgt = [...views.subarray(i * 4, (i + 1) * 4)];
-    cancelTransition();
-    const curSpeed = [
-      quats.rot[0] * bezierDuration / 3.0,
-      quats.rot[1] * bezierDuration / 3.0,
-      quats.rot[2] * bezierDuration / 3.0
-    ];
-
-    const tlog = qlog0(qmul(tgt, qconj(quats.cur)), 1);
-    quats.bezier = [[0.0, 0.0, 0.0], curSpeed, tlog, tlog];
-    quats.rot = [0.0, 0.0, 0.0];
-    bTime = 0.0;
   });
 
   requestAnimationFrame(drawFrame);

@@ -10,10 +10,3 @@ body {
   position: relative;
   background: black;
 }
-
-button {
-  position: absolute;
-  right: 20px;
-  bottom: 20px;
-  font-size: 200%;
-}
