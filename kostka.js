@@ -1,6 +1,101 @@
+class Quat {
+  constructor(x, y, z, w) {
+    this.q = [x, y, z, w];
+  }
+
+  static one() {
+    return new Quat(0.0, 0.0, 0.0, 1.0);
+  }
+
+  static zero() {
+    return new Quat(0.0, 0.0, 0.0, 0.0);
+  }
+
+  static rotX(a) {
+    return new Quat(Math.sin(a / 2), 0.0, 0.0, Math.cos(a / 2));
+  }
+
+  static rotY(a) {
+    return new Quat(0.0, Math.sin(a / 2), 0.0, Math.cos(a / 2));
+  }
+
+  get data() {
+    return this.q;
+  }
+
+  conj() {
+    const q = this.q;
+    return new Quat(-q[0], -q[1], -q[2], q[3]);
+  }
+
+  norm() {
+    const q = this.q;
+    return Math.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
+  }
+
+  normal() { // assumes |q| ≠ 0
+    return this.muls(1.0 / this.norm());
+  }
+
+  mul(other) {
+    const q1 = this.q;
+    const q2 = other.q;
+    return new Quat(
+      q1[3] * q2[0] + q2[3] * q1[0] + q1[1] * q2[2] - q1[2] * q2[1],
+      q1[3] * q2[1] + q2[3] * q1[1] + q1[2] * q2[0] - q1[0] * q2[2],
+      q1[3] * q2[2] + q2[3] * q1[2] + q1[0] * q2[1] - q1[1] * q2[0],
+      q1[3] * q2[3] - q1[0] * q2[0] - q1[1] * q2[1] - q1[2] * q2[2]
+    );
+  }
+
+  div(other) { // assumes |other| = 1
+    return this.mul(other.conj());
+  }
+
+  muls(x) {
+    const q = this.q;
+    return new Quat(x * q[0], x * q[1], x * q[2], x * q[3]);
+  }
+
+  add(other, x = 1.0) { // MODIFYING
+    for(let i = 0; i < 4; i++)
+      this.q[i] += x * other.q[i];
+  }
+
+  vec() {
+    const q = this.q;
+    return new Quat(q[0], q[1], q[2], 0.0);
+  }
+
+  log() { // assumes |q| = 1
+    const q = this.q;
+    const s = Math.sign(q[3]);
+    if(s * q[3] > 1.0)
+      return Quat.zero();
+    const a = Math.acos(s * q[3]);
+    if(a == 0.0)
+      return Quat.zero();
+    else {
+      const n = this.vec().normal();
+      return n.muls(s * a);
+    }
+  }
+
+  exp() { // assumes q[3] = 0
+    const a = this.norm();
+    if(a == 0)
+      return Quat.one();
+    else {
+      const n = this.muls(1.0 / a).q;
+      const sa = Math.sin(a);
+      return new Quat(n[0] * sa, n[1] * sa, n[2] * sa, Math.cos(a));
+    }
+  }
+}
+
 const quats = {
-  cur: [0.0, 0.0, 0.0, 1.0],
-  tmp: [0.0, 0.0, 0.0, 1.0],
+  cur: Quat.one(),
+  tmp: Quat.one(),
   bezier: null
 };
 
@@ -32,6 +127,18 @@ window.addEventListener('DOMContentLoaded', async _ => {
   const views = new Float32Array(await fetch('quats.data', { cache: "no-store" }).then(r => r.arrayBuffer()));
 
   let lastT;
+  let bTime;
+
+  function bezier() {
+    const t = Math.min(bTime / bezierDuration, 1.0);
+    const rt = 1.0 - t;
+    const wts = [rt*rt*rt, 3.0*t*rt*rt, 3.0*t*t*rt, t*t*t];
+    const ret = Quat.zero();
+    for(let i = 0; i < 4; i++)
+      ret.add(quats.bezier[i], wts[i]);
+    return ret;
+  }
+
   function drawFrame(time) {
     const ratio = window.devicePixelRatio || 1;
     const width = canvas.width = canvas.clientWidth * ratio;
@@ -55,25 +162,14 @@ window.addEventListener('DOMContentLoaded', async _ => {
     lastT = time;
 
     if(quats.bezier !== null) {
-      const t = Math.min(bTime / bezierDuration, 1.0);
-      const rt = 1.0 - t;
-      const wts = [rt*rt*rt, 3*t*rt*rt, 3*t*t*rt, t*t*t];
-      const lq = [0.0, 0.0, 0.0];
-      for(let i = 0; i < 3; i++)
-        for(let j = 0; j < 4; j++)
-          lq[i] += wts[j] * quats.bezier[j][i];
-      quats.tmp = qexp(lq, 1);
-
-      if(t == 1.0) {
-        const q = qmul(quats.tmp, quats.cur);
-        quats.cur = qnorm(q);
-        quats.tmp = [0.0, 0.0, 0.0, 1.0];
-        quats.bezier = null;
-      }
+      if(bTime < bezierDuration)
+        quats.tmp = bezier().exp();
+      else
+        cancelTransition();
     }
 
-    gl.uniform4fv(prog.qView, quats.cur);
-    gl.uniform4fv(prog.qView2, quats.tmp);
+    gl.uniform4fv(prog.qView, quats.cur.data);
+    gl.uniform4fv(prog.qView2, quats.tmp.data);
 
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, 10000);
@@ -83,20 +179,11 @@ window.addEventListener('DOMContentLoaded', async _ => {
 
   let pid, pcoords;
   const hist = [];
-  let bTime;
 
   function cancelTransition() {
     if(quats.bezier !== null) {
-      const t = Math.min(bTime / bezierDuration, 1.0);
-      const rt = 1.0 - t;
-      const wts = [rt*rt*rt, 3*t*rt*rt, 3*t*t*rt, t*t*t];
-      const lq = [0.0, 0.0, 0.0];
-      for(let i = 0; i < 3; i++)
-        for(let j = 0; j < 4; j++)
-          lq[i] += wts[j] * quats.bezier[j][i];
-      const q = qmul(qexp(lq, 1), quats.cur);
-      quats.cur = qnorm(q);
-      quats.tmp = [0.0, 0.0, 0.0, 1.0];
+      quats.cur = bezier().exp().mul(quats.cur).normal();
+      quats.tmp = Quat.one();
       quats.bezier = null;
     }
   }
@@ -119,9 +206,7 @@ window.addEventListener('DOMContentLoaded', async _ => {
       const angle = viewAngle * Math.PI / 180.0 * 3.0;
       const ax = (coords[0] - pcoords[0]) / canvas.height * 2 * angle;
       const ay = -(coords[1] - pcoords[1]) / canvas.height * 2 * angle;
-      quats.tmp = qmul(
-        [Math.sin(ay / 2), 0, 0, Math.cos(ay / 2)],
-        [0, Math.sin(ax / 2), 0, Math.cos(ax / 2)]);
+      quats.tmp = Quat.rotX(ay).mul(Quat.rotY(ax));
       const now = performance.now();
       hist.push({ t: performance.now(), q: quats.tmp });
       hist.splice(0, hist.findIndex(rec => rec.t >= now - 100));
@@ -130,79 +215,33 @@ window.addEventListener('DOMContentLoaded', async _ => {
 
   canvas.addEventListener('pointerup', ev => {
     if(pid === ev.pointerId) {
-      quats.cur = qmul(quats.tmp, quats.cur);
+      quats.cur = quats.tmp.mul(quats.cur);
       const now = performance.now();
       hist.splice(0, hist.findIndex(rec => rec[0] >= now - 100));
       if(hist.length >= 2 && hist.at(-1).t != hist[0].t && now - hist.at(-1).t < 10) {
         const dt = hist.at(-1).t - hist[0].t;
-        const dq = qmul(hist.at(-1).q, qconj(hist[0].q));
-        const rot = qlog0(dq, dt);
+        const dq = hist.at(-1).q.div(hist[0].q);
+        const curSpeed = dq.log().muls(1.0 / dt);
         const i = Math.floor(Math.random() * 6);
-        const tgt = [...views.subarray(i * 4, (i + 1) * 4)];
-        const curSpeed = [
-          rot[0] * bezierDuration / 3.0,
-          rot[1] * bezierDuration / 3.0,
-          rot[2] * bezierDuration / 3.0
-        ];
-        const tlog = qlog0(qmul(tgt, qconj(quats.cur)), 1);
-        quats.bezier = [[0.0, 0.0, 0.0], curSpeed, tlog, tlog];
+        const tgt = new Quat(...views.subarray(i * 4, (i + 1) * 4));
+        const tlog = tgt.div(quats.cur).log();
+        quats.bezier = [Quat.zero(), curSpeed.muls(bezierDuration / 3.0), tlog, tlog];
         bTime = 0.0;
       }
-      quats.tmp = [0.0, 0.0, 0.0, 1.0];
+      quats.tmp = Quat.one();
       canvas.releasePointerCapture(pid);
       pid = undefined;
     }
   });
 
   canvas.addEventListener('pointercancel', ev => {
-    quats.tmp = [0.0, 0.0, 0.0, 1.0];
+    quats.tmp = Quat.one();
     canvas.releasePointerCapture(pid);
     pid = undefined;
   });
 
   requestAnimationFrame(drawFrame);
 });
-
-function qmul(q1, q2) {
-  return [
-    q1[3] * q2[0] + q2[3] * q1[0] + q1[1] * q2[2] - q1[2] * q2[1],
-    q1[3] * q2[1] + q2[3] * q1[1] + q1[2] * q2[0] - q1[0] * q2[2],
-    q1[3] * q2[2] + q2[3] * q1[2] + q1[0] * q2[1] - q1[1] * q2[0],
-    q1[3] * q2[3] - q1[0] * q2[0] - q1[1] * q2[1] - q1[2] * q2[2],
-  ];
-}
-
-function qconj(q) {
-  return [-q[0], -q[1], -q[2], q[3]];
-}
-
-function qnorm(q) { // assumes |q| ≠ 0
-  const n = Math.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
-  return [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
-}
-
-function qlog0(q, div) { // assumes |q| = 1
-  const s = Math.sign(q[3]);
-  if(s * q[3] > 1.0)
-    return [0.0, 0.0, 0.0];
-  const a = Math.acos(s * q[3]);
-  if(a == 0.0)
-    return [0.0, 0.0, 0.0];
-  else {
-    const m = s * a / Math.sin(a) / div;
-    return [m * q[0], m * q[1], m * q[2]];
-  }
-}
-
-function qexp(v, mul) {
-  const a = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-  if(a == 0)
-    return [0.0, 0.0, 0.0, 1.0];
-  else {
-    const sa = Math.sin(a * mul);
-    return [v[0] / a * sa, v[1] / a * sa, v[2] / a * sa, Math.cos(a * mul)];
-  }
-}
 
 function Shader(ctx, type, source) {
   var shader = ctx.createShader(type);
