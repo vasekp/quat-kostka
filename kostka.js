@@ -53,7 +53,7 @@ window.addEventListener('DOMContentLoaded', async _ => {
       if(dt < 1000) {
         const rot = qexp(quats.rot, dt);
         const q = qmul(rot, quats.cur);
-        const n = qnorm(q, q);
+        const n = qnorm(q);
         quats.cur = [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
         bTime += dt;
       }
@@ -72,7 +72,7 @@ window.addEventListener('DOMContentLoaded', async _ => {
 
       if(t == 1.0) {
         const q = qmul(quats.tmp, quats.cur);
-        const n = qnorm(q, q);
+        const n = qnorm(q);
         quats.cur = [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
         quats.tmp = [0.0, 0.0, 0.0, 1.0];
         quats.bezier = null;
@@ -103,7 +103,7 @@ window.addEventListener('DOMContentLoaded', async _ => {
         for(let j = 0; j < 4; j++)
           lq[i] += wts[j] * quats.bezier[j][i];
       const q = qmul(qexp(lq, 1), quats.cur);
-      const n = qnorm(q, q);
+      const n = qnorm(q);
       quats.cur = [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
       quats.tmp = [0.0, 0.0, 0.0, 1.0];
 
@@ -202,7 +202,7 @@ function qconj(q) {
 }
 
 function qnorm(q) {
-  return q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3];
+  return Math.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
 }
 
 function qlog0(q, div) { // assumes q.q == 1
