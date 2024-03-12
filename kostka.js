@@ -7,6 +7,7 @@ const quats = {
 
 const viewAngle = 40.0;
 const bezierDuration = 1500.0;
+const speedLoss = 0.002;
 
 window.addEventListener('DOMContentLoaded', async _ => {
   const canvas = document.querySelector('canvas');
@@ -51,10 +52,17 @@ window.addEventListener('DOMContentLoaded', async _ => {
     if(lastT !== undefined) {
       const dt = time - lastT;
       if(dt < 1000) {
-        const rot = qexp(quats.rot, dt);
-        const q = qmul(rot, quats.cur);
+        const rot = quats.rot;
+        const exp = qexp(rot, dt);
+        const q = qmul(exp, quats.cur);
         const n = qnorm(q);
         quats.cur = [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
+        const l0 = Math.sqrt(rot[0] * rot[0] + rot[1] * rot[1] + rot[2] * rot[2]);
+        if(l0 > 0.0) {
+          const l1 = Math.max(l0 - speedLoss * dt / 1000.0, 0.0);
+          console.log(l0, l1);
+          quats.rot = [rot[0] * l1 / l0, rot[1] * l1 / l0, rot[2] * l1 / l0];
+        }
         bTime += dt;
       }
     }
