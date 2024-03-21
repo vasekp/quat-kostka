@@ -218,7 +218,7 @@ window.addEventListener('DOMContentLoaded', async _ => {
       quats.cur = quats.tmp.mul(quats.cur);
       const now = performance.now();
       hist.splice(0, hist.findIndex(rec => rec[0] >= now - 100));
-      if(hist.length >= 2 && hist.at(-1).t != hist[0].t && now - hist.at(-1).t < 10) {
+      if(hist.length >= 2 && hist.at(-1).t != hist[0].t && now - hist.at(-1).t < 50) {
         const dt = hist.at(-1).t - hist[0].t;
         const dq = hist.at(-1).q.div(hist[0].q);
         const curSpeed = dq.log().muls(1.0 / dt);
